@@ -1,0 +1,118 @@
+name: Release Pandaria
+
+on:
+  push:
+    tags:
+      - 'v*-ent*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on:
+      - org-cnrancher-runner-k8s
+    container: registry.suse.com/bci/bci-base:latest
+    env:
+      GOPRIVATE: github.com/cnrancher/pandaria
+      GONOSUMDB: github.com/cnrancher/pandaria
+      TAG_NAME: ${{ github.ref_name }}
+    steps:
+      - name: install dependencies
+        shell: bash
+        run: zypper install -y git jq
+      - name: Git safe directory
+        run: git config --global --add safe.directory "$PWD"
+      - name: Checkout Repository
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0 https://github.com/actions/checkout
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Configure Git Auth For Private Go Modules
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          [[ -n "${GH_TOKEN}" ]] || { echo "GH_TOKEN is empty"; exit 1; }
+
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/cnrancher/pandaria".insteadOf "https://github.com/cnrancher/pandaria"
+
+      - name: Validate Release Tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ent([0-9]+)?$ ]]; then
+            echo "Validated full release tag: ${TAG_NAME}"
+          elif [[ "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ent([0-9]+)?-rc[0-9]+$ ]]; then
+            echo "Validated RC release tag: ${TAG_NAME}"
+          else
+            echo "Unsupported tag format: ${TAG_NAME}"
+            echo "Expected vX.Y.Z-ent, vX.Y.Z-entN, vX.Y.Z-ent-rcN, or vX.Y.Z-entN-rcN"
+            exit 1
+          fi
+
+      - name: Ensure Release Tag Exists Locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+
+      - name: Ensure Terraform Registry Manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f terraform-registry-manifest.json ]]; then
+            cat > terraform-registry-manifest.json <<'EOF'
+          {
+            "version": 1,
+            "metadata": {
+              "protocol_versions": ["4.0", "5.0", "6.0"]
+            }
+          }
+          EOF
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0 https://github.com/actions/setup-go
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Import GPG Key
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            history -c || true
+          }
+          trap cleanup EXIT TERM
+
+          [[ -n "${GPG_PRIVATE_KEY}" ]] || { echo "GPG_PRIVATE_KEY is empty"; exit 1; }
+          [[ -n "${GPG_PASSPHRASE}" ]] || { echo "GPG_PASSPHRASE is empty"; exit 1; }
+          [[ -n "${GPG_KEY_ID}" ]] || { echo "GPG_KEY_ID is empty"; exit 1; }
+
+          export GNUPGHOME="$(mktemp -d)"
+          chmod 700 "${GNUPGHOME}"
+          echo "GNUPGHOME=${GNUPGHOME}" >> "${GITHUB_ENV}"
+
+          printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          gpg --batch --list-secret-keys "${GPG_KEY_ID}" >/dev/null
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0 https://github.com/goreleaser/goreleaser-action
+        with:
+          args: release --clean --config .goreleaser.pandaria.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
