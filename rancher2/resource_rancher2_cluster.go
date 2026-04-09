@@ -48,6 +48,18 @@ func resourceRancher2Cluster() *schema.Resource {
 				}
 			}
 
+			if d.Get("driver") == clusterDriverTKEV2 && d.HasChange("tke_config_v2") {
+				old, new := d.GetChange("tke_config_v2")
+				oldObj := expandClusterTKEConfigV2(old.([]interface{}), d.Get("name").(string))
+				newObj := expandClusterTKEConfigV2(new.([]interface{}), d.Get("name").(string))
+
+				if reflect.DeepEqual(oldObj, newObj) {
+					d.Clear("tke_config_v2")
+				} else {
+					d.SetNew("tke_config_v2", flattenClusterTKEConfigV2(newObj, []interface{}{}))
+				}
+			}
+
 			// Allow the configuration of the imported_config field only if the
 			// cluster is an imported generic cluster or an imported hosted cluster (e.g. AKS, GKE, EKS).
 			// Previously defined 'conflictsWith' entries already handle other cluster types (rke, rke2, k3s)
@@ -159,6 +171,10 @@ func resourceRancher2ClusterCreate(d *schema.ResourceData, meta interface{}) err
 	expectedState := []string{"active"}
 
 	if cluster.Driver == clusterDriverEKSV2 && cluster.EKSConfig.Imported {
+		expectedState = append(expectedState, "pending")
+	}
+
+	if cluster.Driver == clusterDriverTKEV2 && cluster.TKEConfig != nil && cluster.TKEConfig.Imported {
 		expectedState = append(expectedState, "pending")
 	}
 
@@ -350,6 +366,8 @@ func resourceRancher2ClusterUpdate(d *schema.ResourceData, meta interface{}) err
 			return err
 		}
 		update["okeEngineConfig"] = okeConfig
+	case ToLower(clusterDriverTKEV2):
+		update["tkeConfig"] = expandClusterTKEConfigV2(d.Get("tke_config_v2").([]interface{}), d.Get("name").(string))
 	case ToLower(clusterDriverRKE):
 		return fmt.Errorf("[INFO] Rancher v2.12+ does not support RKE1. Please migrate clusters to RKE2 or K3s, or delete the related resources. More info: https://www.suse.com/c/rke-end-of-life-by-july-2025-replatform-to-rke2-or-k3s")
 	case clusterDriverK3S:
@@ -715,6 +733,13 @@ func isImportedCluster(d *schema.ResourceDiff) bool {
 	isAks := ok && len(newAksArray) > 0
 	if isAks {
 		return expandClusterAKSConfigV2(newAksArray).Imported
+	}
+
+	tke := d.Get("tke_config_v2")
+	newTKEArray, ok := tke.([]interface{})
+	isTKE := ok && len(newTKEArray) > 0
+	if isTKE {
+		return expandClusterTKEConfigV2(newTKEArray, "").Imported
 	}
 
 	// if this is a generic imported cluster,

@@ -194,6 +194,15 @@ func flattenCluster(d *schema.ResourceData, in *Cluster, clusterRegToken *manage
 		if err != nil {
 			return err
 		}
+	case ToLower(clusterDriverTKEV2):
+		v, ok := d.Get("tke_config_v2").([]interface{})
+		if !ok {
+			v = []interface{}{}
+		}
+		err = d.Set("tke_config_v2", flattenClusterTKEConfigV2(in.TKEConfig, v))
+		if err != nil {
+			return err
+		}
 	case clusterDriverImported:
 		v, ok := d.Get("imported_config").([]interface{})
 		if !ok {
@@ -485,6 +494,11 @@ func expandCluster(in *schema.ResourceData) (*Cluster, error) {
 		}
 		obj.OracleKubernetesEngineConfig = okeConfig
 		obj.Driver = clusterOKEKind
+	}
+
+	if v, ok := in.Get("tke_config_v2").([]interface{}); ok && len(v) > 0 {
+		obj.TKEConfig = expandClusterTKEConfigV2(v, obj.Name)
+		obj.Driver = clusterDriverTKEV2
 	}
 
 	if v, ok := in.Get("k3s_config").([]interface{}); ok && len(v) > 0 {

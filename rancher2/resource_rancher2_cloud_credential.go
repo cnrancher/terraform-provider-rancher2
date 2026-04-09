@@ -19,6 +19,7 @@ const (
 	linodeConfigDriver        = "linode"
 	nutanixConfigDriver       = "nutanix"
 	openstackConfigDriver     = "openstack"
+	tkeConfigDriver           = "tke"
 	vmwarevsphereConfigDriver = "vmwarevsphere"
 )
 
@@ -50,7 +51,7 @@ func resourceRancher2CloudCredentialCreate(d *schema.ResourceData, meta interfac
 		return err
 	}
 
-	if nodeDriver, ok := d.Get("driver").(string); ok && nodeDriver != s3ConfigDriver {
+	if nodeDriver, ok := d.Get("driver").(string); ok && nodeDriver != s3ConfigDriver && nodeDriver != tkeConfigDriver {
 		err = meta.(*Config).activateNodeDriver(nodeDriver, d.Timeout(schema.TimeoutCreate))
 		if err != nil {
 			return err
@@ -154,6 +155,8 @@ func resourceRancher2CloudCredentialUpdate(d *schema.ResourceData, meta interfac
 		update["openstackcredentialConfig"] = expandCloudCredentialOpenstack(d.Get("openstack_credential_config").([]interface{}))
 	case s3ConfigDriver:
 		update["s3credentialConfig"] = expandCloudCredentialS3(d.Get("s3_credential_config").([]interface{}))
+	case tkeConfigDriver:
+		update["tkecredentialConfig"] = expandCloudCredentialTKE(d.Get("tke_credential_config").([]interface{}))
 	case vmwarevsphereConfigDriver:
 		update["vmwarevspherecredentialConfig"] = expandCloudCredentialVsphere(d.Get("vsphere_credential_config").([]interface{}))
 	default:

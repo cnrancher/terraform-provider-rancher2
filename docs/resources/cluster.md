@@ -382,6 +382,53 @@ resource "rancher2_cluster" "foo" {
 }
 ```
 
+### Creating TKE cluster from Rancher v2, using `tke_config_v2`.
+
+```hcl
+resource "rancher2_cloud_credential" "foo-tke" {
+  name = "foo-tke"
+  tke_credential_config {
+    access_key_id     = "<tencent-access-key-id>"
+    access_key_secret = "<tencent-access-key-secret>"
+  }
+}
+
+resource "rancher2_cluster" "foo" {
+  name = "foo-tke"
+  description = "Terraform TKE cluster"
+  tke_config_v2 {
+    region                = "ap-guangzhou"
+    tke_credential_secret = rancher2_cloud_credential.foo-tke.id
+    cluster_basic_settings {
+      cluster_name = "foo-tke"
+    }
+    virtual_node_pool_list {
+      name                = "foo-tke-virtual-pool"
+      os                  = "tlinux3.1x86_64"
+      security_group_ids  = ["sg-xxxxx"]
+      subnet_ids          = ["subnet-xxxxx"]
+      labels {
+        name  = "env"
+        value = "test"
+      }
+      taints {
+        key    = "dedicated"
+        value  = "virtual"
+        effect = "NoSchedule"
+      }
+      virtual_nodes {
+        display_name = "virtual-node-a"
+        subnet_id    = "subnet-xxxxx"
+        tags {
+          key   = "owner"
+          value = "terraform"
+        }
+      }
+    }
+  }
+}
+```
+
 ## Argument Reference
 
 The following arguments are supported:
@@ -397,6 +444,7 @@ The following arguments are supported:
 * `eks_config_v2` - (Optional/Computed) The Amazon EKS V2 configuration to create or import `eks` Clusters. Conflicts with `gke_config_v2`, `k3s_config`, `oke_config` and `rke_config`. For Rancher v2.5.x and above (list maxitems:1)
 * `gke_config_v2` - (Optional) The Google GKE V2 configuration for `gke` Clusters. Conflicts with `aks_config_v2`, `eks_config_v2`, `k3s_config`, `oke_config` and `rke_config`. For Rancher v2.5.8 and above (list maxitems:1)
 * `oke_config` - (Optional) The Oracle OKE configuration for `oke` Clusters. Conflicts with `aks_config_v2`, `eks_config_v2`, `gke_config_v2`, `k3s_config` and `rke_config` (list maxitems:1)
+* `tke_config_v2` - (Optional) The Tencent TKE V2 configuration for creating/importing `tke` Clusters. Conflicts with `aks_config_v2`, `eks_config_v2`, `gke_config_v2`, `oke_config`, `k3s_config`, `rke_config` and `rke2_config` (list maxitems:1)
 * `imported_config` - (Optional) The imported configuration for generic imported Clusters. Conflicts with `aks_config_v2`, `eks_config_v2`, `gke_config_v2`, `rke_config`, `rke2_config` and `k3s_config` (list maxitems:1)
 * `description` - (Optional) The description for Cluster (string)
 * `cluster_auth_endpoint` - (Optional/Computed) Enabling the [local cluster authorized endpoint](https://rancher.com/docs/rancher/v2.x/en/cluster-provisioning/rke-clusters/options/#local-cluster-auth-endpoint) allows direct communication with the cluster, bypassing the Rancher API proxy. (list maxitems:1)
@@ -423,7 +471,7 @@ The following attributes are exported:
 * `id` - (Computed) The ID of the resource (string)
 * `cluster_registration_token` - (Computed) Cluster Registration Token generated for the cluster (list maxitems:1)
 * `default_project_id` - (Computed) Default project ID for the cluster (string)
-* `driver` - (Computed) The driver used for the Cluster. `imported`, `azurekubernetesservice`, `amazonelasticcontainerservice`, `googlekubernetesengine` and `rancherKubernetesEngine` are supported (string)
+* `driver` - (Computed) The driver used for the Cluster. `imported`, `azurekubernetesservice`, `amazonelasticcontainerservice`, `googlekubernetesengine`, `tke` and `rancherKubernetesEngine` are supported (string)
 * `istio_enabled` - (Computed) Is istio enabled at cluster? For Rancher v2.3.x and above (bool)
 * `kube_config` - (Computed/Sensitive) Kube Config generated for the cluster. Note: For Rancher 2.6.0 and above, when the cluster has `cluster_auth_endpoint` enabled, the kube_config will not be available until the cluster is `connected` (string)
 * `ca_cert` - (Computed/Sensitive) K8s cluster ca cert (string)
@@ -1579,6 +1627,24 @@ The following arguments are supported:
 * `vcn_compartment_id` - (Optional) The OCID of the compartment (if different from `compartment_id`) in which to find the pre-existing virtual network set with `vcn_name`. (string)
 * `vcn_name` - (Optional) The name of an existing virtual network to use for the cluster creation. If set, you must also set `load_balancer_subnet_name_1`. A VCN and subnets will be created if none are specified. (string)
 * `worker_node_ingress_cidr` - (Optional) Additional CIDR from which to allow ingress to worker nodes (string)
+
+### `tke_config_v2`
+
+#### Arguments
+
+* `imported` - (Optional) Is TKE cluster imported? Default: `false` (bool)
+* `cluster_id` - (Optional) Existing TKE cluster ID. Required for imported cluster flows (string)
+* `region` - (Optional) TKE region (string)
+* `tke_credential_secret` - (Optional/Sensitive) Rancher cloud credential secret ID for TKE (string)
+* `cluster_basic_settings` - (Optional) Basic settings for cluster creation (list maxitems:1)
+* `cluster_advanced_settings` - (Optional) Advanced settings for cluster creation (list maxitems:1)
+* `cluster_cidr_settings` - (Optional) CIDR/network settings for cluster creation (list maxitems:1)
+* `cluster_endpoint` - (Optional) Cluster endpoint settings (list maxitems:1)
+* `extension_addon` - (Optional) Extension addons (list)
+* `node_pool_list` - (Optional) Node pool definitions (list)
+  Supports `user_script` for passing a custom initialization script to node pool instances.
+* `virtual_node_pool_list` - (Optional) Virtual node pool definitions (list)
+* `run_instances_for_node` - (Optional) Initial run-instances node settings (list maxitems:1)
 
 ### `cluster_auth_endpoint`
 

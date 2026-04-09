@@ -92,6 +92,14 @@ func dataSourceRancher2Cluster() *schema.Resource {
 					Schema: clusterOKEConfigFields(),
 				},
 			},
+			"tke_config_v2": {
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: clusterTKEConfigV2Fields(),
+				},
+			},
 			"default_project_id": {
 				Type:     schema.TypeString,
 				Computed: true,

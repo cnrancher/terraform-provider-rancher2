@@ -6,7 +6,7 @@ page_title: "rancher2_cloud_credential Resource"
 
 Provides a Rancher v2 Cloud Credential resource. This can be used to create Cloud Credential for Rancher v2.2.x and retrieve their information.
 
-amazonec2, azure, digitalocean, harvester, linode, nutanix, openstack and vsphere credentials config are supported for Cloud Credential.
+amazonec2, azure, digitalocean, harvester, linode, nutanix, openstack, tke and vsphere credentials config are supported for Cloud Credential.
 
 ## Example Usage
 
@@ -54,6 +54,7 @@ The following arguments are supported:
 * `nutanix_credential_config` - (Optional) Nutanix config for the Cloud Credential (list maxitems:1)
 * `openstack_credential_config` - (Optional) OpenStack config for the Cloud Credential (list maxitems:1)
 * `s3_credential_config` - (Optional) S3 config for the Cloud Credential. For Rancher 2.6.0 and above (list maxitems:1)
+* `tke_credential_config` - (Optional) Tencent TKE config for the Cloud Credential (list maxitems:1)
 * `vsphere_credential_config` - (Optional) vSphere config for the Cloud Credential (list maxitems:1)
 * `annotations` - (Optional) Annotations for Cloud Credential object (map)
 * `labels` - (Optional/Computed) Labels for Cloud Credential object (map)
@@ -148,6 +149,13 @@ The following attributes are exported:
 * `vcenter` - (Required) vSphere IP/hostname for vCenter (string)
 * `vcenter_port` - (Optional) vSphere Port for vCenter. Default `443` (string)
 
+### `tke_credential_config`
+
+#### Arguments
+
+* `access_key_id` - (Required/Sensitive) TKE access key id (string)
+* `access_key_secret` - (Required/Sensitive) TKE access key secret (string)
+
 ## Timeouts
 
 `rancher2_cloud_credential` provides the following
@@ -175,4 +183,5 @@ The following drivers are supported:
 * nutanix
 * openstack
 * s3
+* tke
 * vmwarevsphere
