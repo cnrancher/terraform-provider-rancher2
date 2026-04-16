@@ -1039,6 +1039,9 @@ func expandClusterTKEConfigV2(p []interface{}, clusterName string) *managementCl
 	if v, ok := in["tke_credential_secret"].(string); ok && len(v) > 0 {
 		obj.TKECredentialSecret = v
 	}
+	if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
+		obj.ClusterEndpoint = expandClusterTKEClusterEndpoint(v)
+	}
 
 	if obj.Imported {
 		return obj
@@ -1060,9 +1063,6 @@ func expandClusterTKEConfigV2(p []interface{}, clusterName string) *managementCl
 	if v, ok := in["cluster_cidr_settings"].([]interface{}); ok && len(v) > 0 {
 		obj.ClusterCIDRSettings = expandClusterTKEClusterCIDRSettings(v)
 	}
-	if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
-		obj.ClusterEndpoint = expandClusterTKEClusterEndpoint(v)
-	}
 	if v, ok := in["extension_addon"].([]interface{}); ok && len(v) > 0 {
 		obj.ExtensionAddon = expandClusterTKEExtensionAddon(v)
 	}
@@ -1074,6 +1074,51 @@ func expandClusterTKEConfigV2(p []interface{}, clusterName string) *managementCl
 	}
 	if v, ok := in["run_instances_for_node"].([]interface{}); ok && len(v) > 0 {
 		obj.RunInstancesForNode = expandClusterTKERunInstancesForNode(v)
+	}
+
+	return obj
+}
+
+func fixClusterTKEConfigV2(p []interface{}, values map[string]interface{}) map[string]interface{} {
+	if len(p) == 0 || p[0] == nil {
+		return values
+	}
+	if values == nil {
+		values = map[string]interface{}{}
+	}
+
+	in := p[0].(map[string]interface{})
+	if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
+		values["clusterEndpoint"] = fixClusterTKEClusterEndpoint(v)
+	}
+
+	return values
+}
+
+func fixClusterTKEClusterEndpoint(p []interface{}) map[string]interface{} {
+	if len(p) == 0 || p[0] == nil {
+		return nil
+	}
+
+	in := p[0].(map[string]interface{})
+	obj := map[string]interface{}{}
+
+	if v, ok := in["domain"].(string); ok && len(v) > 0 {
+		obj["domain"] = v
+	}
+	if v, exists := in["enable"]; exists {
+		if enable, ok := v.(bool); ok {
+			obj["enable"] = enable
+		}
+	}
+	if v, ok := in["extensive_parameters"].(string); ok && len(v) > 0 {
+		obj["extensiveParameters"] = v
+	}
+	if v, ok := in["security_group"].(string); ok && len(v) > 0 {
+		obj["securityGroup"] = v
+	}
+	if v, ok := in["subnet_id"].(string); ok && len(v) > 0 {
+		obj["subnetId"] = v
 	}
 
 	return obj

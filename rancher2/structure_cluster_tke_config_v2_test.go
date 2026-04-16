@@ -205,3 +205,55 @@ func TestExpandClusterTKEConfigV2(t *testing.T) {
 	output := expandClusterTKEConfigV2(testClusterTKEConfigV2Interface, "test")
 	assert.Equal(t, testClusterTKEConfigV2Conf, output, "Unexpected output from expander.")
 }
+
+func TestExpandClusterTKEConfigV2ImportedWithClusterEndpoint(t *testing.T) {
+	input := []interface{}{
+		map[string]interface{}{
+			"imported":              true,
+			"cluster_id":            "cls-123",
+			"region":                "ap-guangzhou",
+			"tke_credential_secret": "cattle-global-data:cc-tke",
+			"cluster_endpoint": []interface{}{
+				map[string]interface{}{
+					"enable": false,
+				},
+			},
+		},
+	}
+
+	output := expandClusterTKEConfigV2(input, "test")
+
+	if assert.NotNil(t, output) {
+		assert.True(t, output.Imported)
+		assert.Equal(t, "cls-123", output.ClusterID)
+		assert.Equal(t, "ap-guangzhou", output.Region)
+		assert.Equal(t, "cattle-global-data:cc-tke", output.TKECredentialSecret)
+		if assert.NotNil(t, output.ClusterEndpoint) {
+			assert.False(t, output.ClusterEndpoint.Enable)
+		}
+	}
+}
+
+func TestFixClusterTKEConfigV2PreservesClusterEndpointEnableFalse(t *testing.T) {
+	input := []interface{}{
+		map[string]interface{}{
+			"cluster_endpoint": []interface{}{
+				map[string]interface{}{
+					"enable": false,
+				},
+			},
+		},
+	}
+
+	values := map[string]interface{}{
+		"imported": true,
+	}
+
+	output := fixClusterTKEConfigV2(input, values)
+
+	endpoint, ok := output["clusterEndpoint"].(map[string]interface{})
+	if assert.True(t, ok) {
+		assert.Contains(t, endpoint, "enable")
+		assert.Equal(t, false, endpoint["enable"])
+	}
+}

@@ -15,6 +15,16 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+func logClusterRequestPayload(action, clusterID string, payload interface{}) {
+	payloadJSON, err := interfaceToJSON(payload)
+	if err != nil {
+		log.Printf("[DEBUG] Rancher cluster request %s cluster_id=%s payload_marshal_error=%v", action, clusterID, err)
+		return
+	}
+
+	log.Printf("[DEBUG] Rancher cluster request %s cluster_id=%s payload=%s", action, clusterID, payloadJSON)
+}
+
 func resourceRancher2Cluster() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceRancher2ClusterCreate,
@@ -205,6 +215,13 @@ func resourceRancher2ClusterCreate(d *schema.ResourceData, meta interface{}) err
 		clusterMap, _ := jsonToMapInterface(clusterStr)
 		clusterMap["gkeConfig"] = fixClusterGKEConfigV2(structToMap(cluster.GKEConfig))
 		err = client.APIBaseClient.Create(managementClient.ClusterType, clusterMap, newCluster)
+	} else if cluster.TKEConfig != nil {
+		clusterStr, _ := interfaceToJSON(cluster)
+		clusterMap, _ := jsonToMapInterface(clusterStr)
+		tkeConfigMap, _ := clusterMap["tkeConfig"].(map[string]interface{})
+		clusterMap["tkeConfig"] = fixClusterTKEConfigV2(d.Get("tke_config_v2").([]interface{}), tkeConfigMap)
+		logClusterRequestPayload("create", "", clusterMap)
+		err = client.APIBaseClient.Create(managementClient.ClusterType, clusterMap, newCluster)
 	} else if cluster.Driver == clusterDriverRKE {
 		return fmt.Errorf("[INFO] Rancher v2.12+ does not support RKE1. Please migrate clusters to RKE2 or K3s, or delete the related resources. More info: https://www.suse.com/c/rke-end-of-life-by-july-2025-replatform-to-rke2-or-k3s")
 	} else {
@@ -367,7 +384,8 @@ func resourceRancher2ClusterUpdate(d *schema.ResourceData, meta interface{}) err
 		}
 		update["okeEngineConfig"] = okeConfig
 	case ToLower(clusterDriverTKEV2):
-		update["tkeConfig"] = expandClusterTKEConfigV2(d.Get("tke_config_v2").([]interface{}), d.Get("name").(string))
+		tkeConfig := expandClusterTKEConfigV2(d.Get("tke_config_v2").([]interface{}), d.Get("name").(string))
+		update["tkeConfig"] = fixClusterTKEConfigV2(d.Get("tke_config_v2").([]interface{}), structToMap(tkeConfig))
 	case ToLower(clusterDriverRKE):
 		return fmt.Errorf("[INFO] Rancher v2.12+ does not support RKE1. Please migrate clusters to RKE2 or K3s, or delete the related resources. More info: https://www.suse.com/c/rke-end-of-life-by-july-2025-replatform-to-rke2-or-k3s")
 	case clusterDriverK3S:
@@ -383,8 +401,14 @@ func resourceRancher2ClusterUpdate(d *schema.ResourceData, meta interface{}) err
 	return resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
 		newCluster := &Cluster{}
 		if replace {
+			if ToLower(d.Get("driver").(string)) == ToLower(clusterDriverTKEV2) {
+				logClusterRequestPayload("replace", d.Id(), update)
+			}
 			err = client.APIBaseClient.Replace(managementClient.ClusterType, cluster, update, newCluster)
 		} else {
+			if ToLower(d.Get("driver").(string)) == ToLower(clusterDriverTKEV2) {
+				logClusterRequestPayload("update", d.Id(), update)
+			}
 			err = client.APIBaseClient.Update(managementClient.ClusterType, cluster, update, newCluster)
 		}
 		if err != nil {
@@ -437,6 +461,10 @@ func resourceRancher2ClusterDelete(d *schema.ResourceData, meta interface{}) err
 			return nil
 		}
 		return err
+	}
+
+	if ToLower(d.Get("driver").(string)) == ToLower(clusterDriverTKEV2) {
+		log.Printf("[DEBUG] Rancher cluster request delete cluster_id=%s type=%s self=%s", cluster.ID, cluster.Type, cluster.Links["self"])
 	}
 
 	err = client.APIBaseClient.Delete(cluster)
