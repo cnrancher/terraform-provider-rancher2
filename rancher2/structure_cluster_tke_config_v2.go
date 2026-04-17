@@ -913,6 +913,33 @@ func flattenClusterTKEClusterEndpoint(in *managementClient.ClusterEndpoint) []in
 	return []interface{}{obj}
 }
 
+func flattenClusterTKEImportedClusterEndpoint(in *managementClient.ClusterEndpoint, p []interface{}) []interface{} {
+	obj := map[string]interface{}{}
+
+	if in != nil {
+		obj["enable"] = in.Enable
+		return []interface{}{obj}
+	}
+
+	if len(p) == 0 || p[0] == nil {
+		return nil
+	}
+
+	prev, ok := p[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	if v, exists := prev["enable"]; exists {
+		if enable, ok := v.(bool); ok {
+			obj["enable"] = enable
+			return []interface{}{obj}
+		}
+	}
+
+	return nil
+}
+
 func expandClusterTKEClusterEndpoint(p []interface{}) *managementClient.ClusterEndpoint {
 	if len(p) == 0 || p[0] == nil {
 		return nil
@@ -934,6 +961,21 @@ func expandClusterTKEClusterEndpoint(p []interface{}) *managementClient.ClusterE
 	if v, ok := in["subnet_id"].(string); ok && len(v) > 0 {
 		obj.SubnetID = v
 	}
+	return obj
+}
+
+func expandClusterTKEImportedClusterEndpoint(p []interface{}) *managementClient.ClusterEndpoint {
+	if len(p) == 0 || p[0] == nil {
+		return nil
+	}
+
+	in := p[0].(map[string]interface{})
+	obj := &managementClient.ClusterEndpoint{}
+
+	if v, ok := in["enable"].(bool); ok {
+		obj.Enable = v
+	}
+
 	return obj
 }
 
@@ -976,6 +1018,52 @@ func flattenClusterTKEConfigV2(in *managementClient.TKEClusterConfigSpec, p []in
 	if in == nil {
 		return nil
 	}
+
+	if in.Imported {
+		obj := map[string]interface{}{
+			"imported": in.Imported,
+		}
+
+		var previous map[string]interface{}
+		if len(p) > 0 && p[0] != nil {
+			previous, _ = p[0].(map[string]interface{})
+		}
+
+		if len(in.ClusterID) > 0 {
+			obj["cluster_id"] = in.ClusterID
+		} else if previous != nil {
+			if v, ok := previous["cluster_id"].(string); ok && len(v) > 0 {
+				obj["cluster_id"] = v
+			}
+		}
+		if len(in.Region) > 0 {
+			obj["region"] = in.Region
+		} else if previous != nil {
+			if v, ok := previous["region"].(string); ok && len(v) > 0 {
+				obj["region"] = v
+			}
+		}
+		if len(in.TKECredentialSecret) > 0 {
+			obj["tke_credential_secret"] = in.TKECredentialSecret
+		} else if previous != nil {
+			if v, ok := previous["tke_credential_secret"].(string); ok && len(v) > 0 {
+				obj["tke_credential_secret"] = v
+			}
+		}
+
+		var previousClusterEndpoint []interface{}
+		if previous != nil {
+			if v, ok := previous["cluster_endpoint"].([]interface{}); ok {
+				previousClusterEndpoint = v
+			}
+		}
+		if endpoint := flattenClusterTKEImportedClusterEndpoint(in.ClusterEndpoint, previousClusterEndpoint); len(endpoint) > 0 {
+			obj["cluster_endpoint"] = endpoint
+		}
+
+		return []interface{}{obj}
+	}
+
 	obj := map[string]interface{}{}
 	if len(p) > 0 && p[0] != nil {
 		obj = p[0].(map[string]interface{})
@@ -1039,12 +1127,16 @@ func expandClusterTKEConfigV2(p []interface{}, clusterName string) *managementCl
 	if v, ok := in["tke_credential_secret"].(string); ok && len(v) > 0 {
 		obj.TKECredentialSecret = v
 	}
-	if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
-		obj.ClusterEndpoint = expandClusterTKEClusterEndpoint(v)
-	}
 
 	if obj.Imported {
+		if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
+			obj.ClusterEndpoint = expandClusterTKEImportedClusterEndpoint(v)
+		}
 		return obj
+	}
+
+	if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
+		obj.ClusterEndpoint = expandClusterTKEClusterEndpoint(v)
 	}
 
 	if v, ok := in["cluster_basic_settings"].([]interface{}); ok && len(v) > 0 {
@@ -1088,11 +1180,33 @@ func fixClusterTKEConfigV2(p []interface{}, values map[string]interface{}) map[s
 	}
 
 	in := p[0].(map[string]interface{})
+	imported, _ := in["imported"].(bool)
 	if v, ok := in["cluster_endpoint"].([]interface{}); ok && len(v) > 0 {
-		values["clusterEndpoint"] = fixClusterTKEClusterEndpoint(v)
+		if imported {
+			values["clusterEndpoint"] = fixClusterTKEImportedClusterEndpoint(v)
+		} else {
+			values["clusterEndpoint"] = fixClusterTKEClusterEndpoint(v)
+		}
 	}
 
 	return values
+}
+
+func fixClusterTKEImportedClusterEndpoint(p []interface{}) map[string]interface{} {
+	if len(p) == 0 || p[0] == nil {
+		return nil
+	}
+
+	in := p[0].(map[string]interface{})
+	obj := map[string]interface{}{}
+
+	if v, exists := in["enable"]; exists {
+		if enable, ok := v.(bool); ok {
+			obj["enable"] = enable
+		}
+	}
+
+	return obj
 }
 
 func fixClusterTKEClusterEndpoint(p []interface{}) map[string]interface{} {

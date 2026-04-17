@@ -215,7 +215,11 @@ func TestExpandClusterTKEConfigV2ImportedWithClusterEndpoint(t *testing.T) {
 			"tke_credential_secret": "cattle-global-data:cc-tke",
 			"cluster_endpoint": []interface{}{
 				map[string]interface{}{
-					"enable": false,
+					"domain":               "example.com",
+					"enable":               false,
+					"extensive_parameters": "foo=bar",
+					"security_group":       "sg-123",
+					"subnet_id":            "subnet-123",
 				},
 			},
 		},
@@ -230,16 +234,118 @@ func TestExpandClusterTKEConfigV2ImportedWithClusterEndpoint(t *testing.T) {
 		assert.Equal(t, "cattle-global-data:cc-tke", output.TKECredentialSecret)
 		if assert.NotNil(t, output.ClusterEndpoint) {
 			assert.False(t, output.ClusterEndpoint.Enable)
+			assert.Empty(t, output.ClusterEndpoint.Domain)
+			assert.Empty(t, output.ClusterEndpoint.ExtensiveParameters)
+			assert.Empty(t, output.ClusterEndpoint.SecurityGroup)
+			assert.Empty(t, output.ClusterEndpoint.SubnetID)
 		}
 	}
+}
+
+func TestFlattenClusterTKEConfigV2ImportedKeepsManagedFieldsOnly(t *testing.T) {
+	input := &managementClient.TKEClusterConfigSpec{
+		Imported:  true,
+		ClusterID: "cls-123",
+		Region:    "ap-guangzhou",
+		ClusterEndpoint: &managementClient.ClusterEndpoint{
+			Domain:              "example.com",
+			Enable:              false,
+			ExtensiveParameters: "foo=bar",
+			SecurityGroup:       "sg-123",
+			SubnetID:            "subnet-123",
+		},
+	}
+
+	previous := []interface{}{
+		map[string]interface{}{
+			"tke_credential_secret": "cattle-global-data:cc-tke",
+			"cluster_basic_settings": []interface{}{
+				map[string]interface{}{
+					"cluster_name": "legacy",
+				},
+			},
+			"node_pool_list": []interface{}{
+				map[string]interface{}{
+					"name": "legacy-pool",
+				},
+			},
+			"cluster_endpoint": []interface{}{
+				map[string]interface{}{
+					"domain": "legacy.example.com",
+					"enable": true,
+				},
+			},
+		},
+	}
+
+	output := flattenClusterTKEConfigV2(input, previous)
+
+	expected := []interface{}{
+		map[string]interface{}{
+			"imported":              true,
+			"cluster_id":            "cls-123",
+			"region":                "ap-guangzhou",
+			"tke_credential_secret": "cattle-global-data:cc-tke",
+			"cluster_endpoint": []interface{}{
+				map[string]interface{}{
+					"enable": false,
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, expected, output)
+}
+
+func TestFlattenClusterTKEConfigV2ImportedPreservesPreviousEndpointEnable(t *testing.T) {
+	input := &managementClient.TKEClusterConfigSpec{
+		Imported:  true,
+		ClusterID: "cls-123",
+		Region:    "ap-guangzhou",
+	}
+
+	previous := []interface{}{
+		map[string]interface{}{
+			"tke_credential_secret": "cattle-global-data:cc-tke",
+			"cluster_endpoint": []interface{}{
+				map[string]interface{}{
+					"domain": "legacy.example.com",
+					"enable": true,
+				},
+			},
+		},
+	}
+
+	output := flattenClusterTKEConfigV2(input, previous)
+
+	expected := []interface{}{
+		map[string]interface{}{
+			"imported":              true,
+			"cluster_id":            "cls-123",
+			"region":                "ap-guangzhou",
+			"tke_credential_secret": "cattle-global-data:cc-tke",
+			"cluster_endpoint": []interface{}{
+				map[string]interface{}{
+					"enable": true,
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, expected, output)
 }
 
 func TestFixClusterTKEConfigV2PreservesClusterEndpointEnableFalse(t *testing.T) {
 	input := []interface{}{
 		map[string]interface{}{
+			"imported": true,
 			"cluster_endpoint": []interface{}{
 				map[string]interface{}{
-					"enable": false,
+					"domain":               "example.com",
+					"enable":               false,
+					"extensive_parameters": "foo=bar",
+					"security_group":       "sg-123",
+					"subnet_id":            "subnet-123",
 				},
 			},
 		},
@@ -255,5 +361,9 @@ func TestFixClusterTKEConfigV2PreservesClusterEndpointEnableFalse(t *testing.T) 
 	if assert.True(t, ok) {
 		assert.Contains(t, endpoint, "enable")
 		assert.Equal(t, false, endpoint["enable"])
+		assert.NotContains(t, endpoint, "domain")
+		assert.NotContains(t, endpoint, "extensiveParameters")
+		assert.NotContains(t, endpoint, "securityGroup")
+		assert.NotContains(t, endpoint, "subnetId")
 	}
 }

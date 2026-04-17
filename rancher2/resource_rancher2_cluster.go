@@ -70,6 +70,13 @@ func resourceRancher2Cluster() *schema.Resource {
 				}
 			}
 
+			tkeConfig, ok := d.Get("tke_config_v2").([]interface{})
+			if ok {
+				if err := validateClusterTKEImportedConfigV2(tkeConfig); err != nil {
+					return err
+				}
+			}
+
 			// Allow the configuration of the imported_config field only if the
 			// cluster is an imported generic cluster or an imported hosted cluster (e.g. AKS, GKE, EKS).
 			// Previously defined 'conflictsWith' entries already handle other cluster types (rke, rke2, k3s)
@@ -738,6 +745,78 @@ func getClusterKubeconfig(c *Config, id, origconfig string) (*managementClient.G
 		case <-ctx.Done():
 			return nil, fmt.Errorf("Timeout getting cluster Kubeconfig: %v", err)
 		}
+	}
+}
+
+func validateClusterTKEImportedConfigV2(p []interface{}) error {
+	if len(p) == 0 || p[0] == nil {
+		return nil
+	}
+
+	in, ok := p[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	imported, _ := in["imported"].(bool)
+	if !imported {
+		return nil
+	}
+
+	blockedFields := []string{
+		"cluster_basic_settings",
+		"cluster_advanced_settings",
+		"cluster_cidr_settings",
+		"extension_addon",
+		"node_pool_list",
+		"virtual_node_pool_list",
+		"run_instances_for_node",
+	}
+
+	for _, field := range blockedFields {
+		if value, exists := in[field]; exists && hasClusterTKEImportedConfigValue(value) {
+			return fmt.Errorf("The rancher2_cluster.tke_config_v2.%s field cannot be used when tke_config_v2.imported is true", field)
+		}
+	}
+
+	endpoint, ok := in["cluster_endpoint"].([]interface{})
+	if !ok || len(endpoint) == 0 || endpoint[0] == nil {
+		return nil
+	}
+
+	endpointFields, ok := endpoint[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	blockedEndpointFields := []string{"domain", "extensive_parameters", "security_group", "subnet_id"}
+	for _, field := range blockedEndpointFields {
+		if value, exists := endpointFields[field]; exists && hasClusterTKEImportedConfigValue(value) {
+			return fmt.Errorf("The rancher2_cluster.tke_config_v2.cluster_endpoint.%s field cannot be used when tke_config_v2.imported is true; only cluster_endpoint.enable is supported", field)
+		}
+	}
+
+	return nil
+}
+
+func hasClusterTKEImportedConfigValue(v interface{}) bool {
+	switch value := v.(type) {
+	case nil:
+		return false
+	case string:
+		return len(value) > 0
+	case bool:
+		return value
+	case int:
+		return value != 0
+	case int64:
+		return value != 0
+	case []interface{}:
+		return len(value) > 0
+	case map[string]interface{}:
+		return len(value) > 0
+	default:
+		return !reflect.ValueOf(v).IsZero()
 	}
 }
 
