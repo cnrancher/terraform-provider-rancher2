@@ -203,6 +203,22 @@ func flattenCluster(d *schema.ResourceData, in *Cluster, clusterRegToken *manage
 		if err != nil {
 			return err
 		}
+		if in.ImportedConfig == nil || len(in.ImportedConfig.PrivateRegistryURL) == 0 {
+			err = d.Set("imported_config", []interface{}{})
+		} else {
+			v, ok = d.Get("imported_config").([]interface{})
+			if !ok {
+				v = []interface{}{}
+			}
+			importedConfig, err := flattenClusterImportedConfig(in.ImportedConfig, v)
+			if err != nil {
+				return err
+			}
+			err = d.Set("imported_config", importedConfig)
+		}
+		if err != nil {
+			return err
+		}
 	case clusterDriverImported:
 		v, ok := d.Get("imported_config").([]interface{})
 		if !ok {

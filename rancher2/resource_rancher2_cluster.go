@@ -78,12 +78,14 @@ func resourceRancher2Cluster() *schema.Resource {
 			}
 
 			// Allow the configuration of the imported_config field only if the
-			// cluster is an imported generic cluster or an imported hosted cluster (e.g. AKS, GKE, EKS).
-			// Previously defined 'conflictsWith' entries already handle other cluster types (rke, rke2, k3s)
-			// so they do not need to be reconsidered here.
+			// cluster is an imported generic cluster, an imported hosted cluster
+			// (e.g. AKS, GKE, EKS), or a TKE cluster.
+			// Previously defined 'conflictsWith' entries already handle other
+			// cluster types (rke, rke2, k3s) so they do not need to be
+			// reconsidered here.
 			importCnf, ok := d.Get("imported_config").([]interface{})
-			if ok && len(importCnf) > 0 && !isImportedCluster(d) {
-				return fmt.Errorf("The rancher2_cluster.imported_config field can only be used when working with generic imported clusters or imported hosted clusters (e.g. AKS, GKE, EKS)")
+			if ok && len(importCnf) > 0 && !isImportedCluster(d) && !canUseImportedConfig(d) {
+				return fmt.Errorf("The rancher2_cluster.imported_config field can only be used when working with generic imported clusters, imported hosted clusters (e.g. AKS, GKE, EKS), or TKE clusters")
 			}
 
 			return nil
@@ -854,4 +856,10 @@ func isImportedCluster(d *schema.ResourceDiff) bool {
 	// Other non-imported cluster types (rke, rke2, k3s, etc.)
 	// are already being blocked via the static ConflictsWith field.
 	return true
+}
+
+func canUseImportedConfig(d *schema.ResourceDiff) bool {
+	tke := d.Get("tke_config_v2")
+	newTKEArray, ok := tke.([]interface{})
+	return ok && len(newTKEArray) > 0
 }
