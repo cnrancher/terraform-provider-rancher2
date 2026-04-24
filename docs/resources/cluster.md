@@ -399,32 +399,80 @@ resource "rancher2_cluster" "foo" {
   tke_config_v2 {
     region                = "ap-guangzhou"
     tke_credential_secret = rancher2_cloud_credential.foo-tke.id
+
     cluster_basic_settings {
-      cluster_name = "foo-tke"
+      cluster_type    = "MANAGED_CLUSTER"
+      cluster_version = "v1.30.1"
+      vpc_id          = "vpc-xxxxx"
+      cluster_level   = "L5"
+      cluster_os      = "tlinux3.1x86_64"
     }
-    virtual_node_pool_list {
-      name                = "foo-tke-virtual-pool"
-      os                  = "tlinux3.1x86_64"
-      security_group_ids  = ["sg-xxxxx"]
-      subnet_ids          = ["subnet-xxxxx"]
-      labels {
-        name  = "env"
-        value = "test"
+
+    cluster_endpoint {
+      enable = true
+      security_group = "sg-xxxxx"
+		  subnet_id = "subnet-xxxxx"
+    }
+
+    node_pool_list {
+      name             = "pool-a"
+      enable_autoscale = true
+      node_pool_os     = "ubuntu22.04x86_64"
+      os_customize_type = "GENERAL"
+      deletion_protection = false
+
+      auto_scaling_group_para {
+        min_size         = 1
+        max_size         = 3
+        desired_capacity = 1
+        vpc_id           = "vpc-xxxxx"
+        subnet_ids       = ["subnet-xxxxx"]
       }
-      taints {
-        key    = "dedicated"
-        value  = "virtual"
-        effect = "NoSchedule"
-      }
-      virtual_nodes {
-        display_name = "virtual-node-a"
-        subnet_id    = "subnet-xxxxx"
-        tags {
-          key   = "owner"
-          value = "terraform"
+
+      launch_configure_para {
+        instance_type = "S5.MEDIUM2"
+        public_ip_assigned   = true
+        security_group_ids   = ["sg-xxxxx"]
+        internet_charge_type = "TRAFFIC_POSTPAID_BY_HOUR"
+        instance_charge_type = "POSTPAID_BY_HOUR"
+        internet_max_bandwidth_out = 50
+
+        key_ids       = ["skey-xxxxx"]
+        system_disk {
+          disk_size = 50
+          disk_type = "CLOUD_PREMIUM"
         }
       }
     }
+  }
+}
+```
+### Importing TKE cluster from Rancher v2, using `tke_config_v2`.
+
+```hcl
+resource "rancher2_cloud_credential" "foo-tke" {
+  name = "foo-tke"
+  tke_credential_config {
+    access_key_id     = "<tencent-access-key-id>"
+    access_key_secret = "<tencent-access-key-secret>"
+  }
+}
+# For imported TKE clusters, don't add any other tke_config_v2 field
+resource "rancher2_cluster" "foo" {
+  name = <cluster-name>
+  description = "Terraform TKE cluster"
+  tke_config_v2 {
+    region                = "ap-beijing"
+    tke_credential_secret = rancher2_cloud_credential.foo-tke.id
+    imported              = true
+    cluster_id            = "cls-xxx"
+
+    cluster_endpoint {
+      enable = true # set true if your TKE cluster use outer-net and false for inner-net
+    }
+  }
+  imported_config {
+    private_registry_url = "<private_registry>"
   }
 }
 ```
@@ -1634,8 +1682,8 @@ The following arguments are supported:
 
 * `imported` - (Optional) Is TKE cluster imported? Default: `false` (bool)
 * `cluster_id` - (Optional) Existing TKE cluster ID. Required for imported cluster flows (string)
-* `region` - (Optional) TKE region (string)
-* `tke_credential_secret` - (Optional/Sensitive) Rancher cloud credential secret ID for TKE (string)
+* `region` - (Required) TKE region (string)
+* `tke_credential_secret` - (Required/Sensitive) Rancher cloud credential secret ID for TKE (string)
 * `cluster_basic_settings` - (Optional) Basic settings for cluster creation (list maxitems:1)
 * `cluster_advanced_settings` - (Optional) Advanced settings for cluster creation (list maxitems:1)
 * `cluster_cidr_settings` - (Optional) CIDR/network settings for cluster creation (list maxitems:1)
@@ -1644,7 +1692,181 @@ The following arguments are supported:
 * `node_pool_list` - (Optional) Node pool definitions (list)
   Supports `user_script` for passing a custom initialization script to node pool instances.
 * `virtual_node_pool_list` - (Optional) Virtual node pool definitions (list)
-* `run_instances_for_node` - (Optional) Initial run-instances node settings (list maxitems:1)
+
+#### `cluster_basic_settings`
+
+##### Arguments
+
+* `cluster_description` - (Optional) Cluster description (string)
+* `cluster_level` - (Optional) TKE Cluster level (string)
+* `cluster_name` - (Optional/Computed) TKE Cluster name (string)
+* `cluster_os` - (Optional) Cluster operating system, supports setting public images (the field passes the corresponding image Name) and custom images (the field passes the corresponding image ID). For details, please refer to: https://cloud.tencent.com/document/product/457/68289. (string)
+* `cluster_type` - (Optional) Deployment type of the cluster, the available values include: 'MANAGED_CLUSTER' and 'INDEPENDENT_CLUSTER'. (string)
+* `cluster_version` - (Optional) Version of the cluster. (string)
+* `is_auto_upgrade` - (Optional/Computed) Enable auto upgrade. Default: `false` (bool)
+* `tags` - (Optional) Tags of cluster. (list)
+* `vpc_id` - (Optional) Vpc Id of the cluster. (string)
+
+#### `cluster_advanced_settings`
+
+##### Arguments
+
+* `audit_enabled` - (Optional) Specify weather the Cluster Audit enabled. NOTE: Enable Cluster Audit will also auto install Log Agent. Please make sure your TKE CamRole have permission to access CLS service. (bool)
+* `audit_log_topic_id` - (Optional) Specify id of existing CLS log topic, or auto create a new topic by leave it empty. (string)
+* `audit_logset_id` - (Optional) Specify id of existing CLS log set, or auto create a new set by leave it empty. (string)
+* `base_pod_number` - (Optional) The number of basic pods. valid when enable_customized_pod_cidr=true. (int)
+* `container_runtime` - (Optional) Runtime type of the cluster, the available values include: 'docker' and 'containerd'.The Kubernetes v1.24 has removed dockershim, so please use containerd in v1.24 or higher. (string)
+* `deletion_protection` - (Optional) Indicates whether cluster deletion protection is enabled. Default: `false` (bool)
+* `enable_customized_pod_cidr` - (Optional) Whether to enable the custom mode of node podCIDR size. Default: `false` (bool)
+* `ipvs` - (Optional) Indicates whether ipvs is enabled. (bool)
+* `is_dual_stack` - (Optional) In the VPC-CNI mode of the cluster, the dual stack cluster status defaults to false, indicating a non dual stack cluster. (bool)
+* `is_non_static_ip_mode` - (Optional) ndicates whether non-static ip mode is enabled. (bool)
+* `kube_api_server` - (Optional) The customized parameters for kube-apiserver. (list)
+* `kube_controller_manager` - (Optional) The customized parameters for kube-controller-manager. (list)
+* `kube_proxy_mode` - (Optional) Cluster kube-proxy mode, the available values include: 'kube-proxy-bpf'. Default is not set.When set to kube-proxy-bpf, cluster version greater than 1.14 and with Tencent Linux 2.4 is required. (string)
+* `kube_scheduler` - (Optional) The customized parameters for kube-scheduler. (list)
+* `network_type` - (Optional) Cluster network type, the available values include: 'GR' and 'VPC-CNI' and 'CiliumOverlay'. Default is GR. (string)
+* `node_name_type` - (Optional) Node name type of Cluster, the available values include: 'lan-ip' and 'hostname', Default is 'lan-ip'.(string)
+* `runtime_version` - (Optional/Computed) Container Runtime version. (string)
+* `vpc_cni_type` - (Optional) Distinguish between shared network card multi-IP mode and independent network card mode. Fill in `tke-route-eni` for shared network card multi-IP mode and `tke-direct-eni` for independent network card mode. The default is shared network card mode. When it is necessary to turn off the vpc-cni container network capability, both `eni_subnet_ids` and `vpc_cni_type` must be set to empty. (string)
+
+#### `cluster_cidr_settings`
+
+##### Arguments
+
+* `claim_expired_seconds` - (Optional) Claim expired seconds to recycle ENI. This field can only set when field `network_type` is 'VPC-CNI'. `claim_expired_seconds` must greater or equal than 300 and less than 15768000. (int)
+* `cluster_cidr` - (Optional) A network address block of the cluster. Different from vpc cidr and cidr of other clusters within this vpc. Must be in 10./192.168/172.[16-31] segments. (string)
+* `eni_subnet_ids` - (Optional) Subnet Ids for cluster with VPC-CNI network mode. This field can only set when field network_type is 'VPC-CNI'. `eni_subnet_ids` can not empty once be set. (list)
+* `ignore_cluster_cidr_conflict` - (Optional) Indicates whether to ignore the cluster cidr conflict error. Default: `false` (bool)
+* `ignore_service_cidr_conflict` - (Optional) Indicates whether to ignore the service cidr conflict error. Only valid in `VPC-CNI` mode. (bool)
+* `max_cluster_service_num` - (Optional) The maximum number of services in the cluster. Default is 256. The range is from 32 to 32768. When its power unequal to 2, it will round upward to the closest power of 2. (int)
+* `max_node_pod_num` - (Optional) The maximum number of Pods per node in the cluster. Default is 256. The minimum value is 4. When its power unequal to 2, it will round upward to the closest power of 2. (int)
+* `os_customize_type` - (Optional) Image type of the cluster os, the available values include: 'GENERAL'.(string)
+* `service_cidr` - (Optional/Computed) A network address block of the service. Different from vpc cidr and cidr of other clusters within this vpc. Must be in 10./192.168/172.[16-31] segments. (string)
+* `subnet_id` - (Optional) Control Plane Subnet Information. This field is required only in the following scenarios: When the container network plugin is CiliumOverlay, TKE will obtain 2 IPs from this subnet to create an internal load balancer; When creating a managed cluster that supports CDC with the VPC-CNI network plugin, at least 12 IPs must be reserved. (string)
+
+#### `cluster_endpoint`
+
+##### Arguments
+
+~> When `imported` is `true`, only `enable` is supported in `cluster_endpoint`.
+
+* `domain` - (Optional) Domain name for cluster Kube-apiserver access. (string)
+* `enable` - (Optional/Computed) Enable cluster endpoint. Default: `false`. Required for imported cluster flows. When `imported` is `true`, `enable=true` means outer net,`enable=false` means inner net. (bool)
+* `extensive_parameters` - (Optional) The LB parameter. Only used for public network access. (string)
+* `security_group` - (Optional) Security group ID for cluster endpoint. (string)
+* `subnet_id` - (Optional) Subnet ID for cluster endpoint. (string)
+
+#### `extension_addon`
+
+Information of the add-on to be installed.
+
+##### Arguments
+
+* `addon_name` - (Required) Addon name (string)
+* `addon_param` - (Optional) Addon parameters (string)
+
+#### `node_pool_list`
+
+##### Arguments
+
+* `name` - (Optional) Node pool name (string)
+* `node_pool_id` - (Optional/Computed) Node pool ID (string)
+* `cluster_id` - (Optional/Computed) Cluster ID (string)
+* `node_pool_os` - (Optional) Node pool operating system (string)
+* `os_customize_type` - (Optional) The image version of the node. Valida values are `DOCKER_CUSTOMIZE` and `GENERAL`.  (string)
+* `deletion_protection` - (Optional/Computed) Indicates whether the node pool deletion protection is enabled. (bool)
+* `enable_autoscale` - (Optional/Computed) Indicate whether to enable auto scaling or not. (bool)
+* `labels` - (Optional)  Labels of kubernetes node pool created nodes. The label key name does not exceed 63 characters, only supports English, numbers,'/','-', and does not allow beginning with ('/'). (list)
+* `tags` - (Optional) Node pool tag specifications, will passthroughs to the scaling instances. (list)
+* `taints` - (Optional) Taints of kubernetes node pool created nodes. (list)
+* `user_script` - (Optional) Base64-encoded user script, executed before initializing the node, currently only effective for adding existing nodes. (string)
+* `auto_scaling_group_para` - (Optional) Auto scaling group parameters (list maxitems:1)
+* `launch_configure_para` - (Optional) Launch configuration parameters (list maxitems:1)
+
+##### `auto_scaling_group_para`
+
+###### Arguments
+
+* `auto_scaling_group_name` - (Optional/Computed) Auto scaling group name (string)
+* `desired_capacity` - (Optional) Desired capacity of the node. (int)
+* `max_size` - (Optional) Maximum number of node. (int)
+* `min_size` - (Optional) Minimum number of node. (int)
+* `subnet_ids` - (Optional) ID list of subnet, and for VPC it is required. (list)
+* `vpc_id` - (Optional) ID of VPC network. (string)
+
+##### `launch_configure_para`
+
+###### Arguments
+
+* `data_disks` - (Optional) Configurations of data disk. (list)
+* `instance_charge_type` - (Optional) Charge type of instance. Valid values are `PREPAID`, `POSTPAID_BY_HOUR`, `SPOTPAID`, `CDCPAID`. (string)
+* `instance_type` - (Optional) Specified types of CVM instance. (string)
+* `internet_charge_type` - (Optional) Charge types for network traffic. Valid value: `BANDWIDTH_PREPAID`, `TRAFFIC_POSTPAID_BY_HOUR` and `BANDWIDTH_PACKAGE`. (string)
+* `internet_max_bandwidth_out` - (Optional) Max bandwidth of Internet access in Mbps. (int)
+* `key_ids` - (Optional)  ID list of keys. (list)
+* `launch_configuration_name` - (Optional/Computed) Launch configuration name (string)
+* `public_ip_assigned` - (Optional/Computed) Specify whether to assign an Internet IP address. (bool)
+* `security_group_ids` - (Optional) Security groups to which a CVM instance belongs. (list)
+* `system_disk` - (Optional) Configurations of system disk. (list maxitems:1)
+
+##### `data_disks`
+
+###### Arguments
+
+* `disk_size` - (Optional) Volume of disk in GB. (int)
+* `disk_type` - (Optional) Types of disk. Valid value: `LOCAL_BASIC`, `LOCAL_SSD`, `CLOUD_BASIC`, `CLOUD_PREMIUM`, `CLOUD_SSD`, `CLOUD_HSSD`, `CLOUD_TSSD` and `CLOUD_BSSD`. (string)
+
+##### `system_disk`
+
+###### Arguments
+
+* `disk_size` - (Optional) Volume of system disk in GB. (int)
+* `disk_type` - (Optional) Type of a CVM disk. Valid value: `LOCAL_BASIC`, `LOCAL_SSD`, `CLOUD_BASIC`, `CLOUD_PREMIUM`, `CLOUD_SSD`, `CLOUD_HSSD`, `CLOUD_TSSD`, `CLOUD_BSSD` and `LOCAL_NVME`. (string)
+
+#### `virtual_node_pool_list`
+
+##### Arguments
+
+* `deletion_protection` - (Optional) Enable super node pool deletion protection. Default: `false` (bool)
+* `labels` - (Optional) labels of super node. (list)
+* `name` - (Optional) super node pool name (string)
+* `node_pool_id` - (Optional/Computed) super node pool ID (string)
+* `os` - (Optional) super node pool OS (string)
+* `security_group_ids` - (Optional) security groups of super node pool. (list)
+* `subnet_ids` - (Optional) subnet id of super node. (list)
+* `taints` - (Optional) taints of super node. (list)
+* `virtual_nodes` - (Optional) super nodes (list)
+
+##### `labels`
+
+###### Arguments
+
+* `name` - (Optional) label name (string)
+* `value` - (Optional) label value (string)
+
+##### `taints`
+
+###### Arguments
+
+* `effect` - (Optional) Effect of the taint. Valid values are: `NoSchedule`, `PreferNoSchedule`, `NoExecute`. (string)
+* `key` - (Optional) Key of the taint. The taint key name does not exceed 63 characters, only supports English, numbers,'/','-', and does not allow beginning with ('/'). (string)
+* `value` - (Optional) Value of the taint. (string)
+
+##### `virtual_nodes`
+
+###### Arguments
+
+* `display_name` - (Optional) display name of super node. (string)
+* `subnet_id` - (Optional) subnet id of super node (string)
+* `tags` - (Optional) super node tags (list)
+
+##### `tags`
+
+###### Arguments
+
+* `key` - (Optional) tag key (string)
+* `value` - (Optional) tag value (string)
 
 ### `cluster_auth_endpoint`
 

@@ -4,6 +4,15 @@ page_title: "Rancher2 Provider"
 
 # Rancher2 Provider
 
+~> **Important:** This provider is developed from the upstream
+[`rancher/terraform-provider-rancher2`](https://github.com/rancher/terraform-provider-rancher2)
+provider, with additional support for creating TKE clusters in Rancher Prime. Except for the TKE
+cluster functionality, it is intended to remain consistent with the upstream
+open source provider.
+TKE clusters are available only in the GC version of Rancher Prime. Use this provider
+only when you need to manage TKE cluster in the GC version of Rancher Prime.
+For all other Rancher2 use cases, use the upstream open source provider.
+
 The Rancher2 provider is used to interact with the
 resources supported by Rancher v2. 
 
